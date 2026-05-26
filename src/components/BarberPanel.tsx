@@ -5,14 +5,19 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Scissors, DollarSign, BarChart3, TrendingUp, Sparkles, CheckCircle, Clock, AlertCircle, XCircle, LogOut, Loader2, ArrowRight, Filter, RefreshCw, Calendar } from "lucide-react";
+import { Scissors, DollarSign, BarChart3, TrendingUp, Sparkles, CheckCircle, Clock, AlertCircle, XCircle, LogOut, Loader2, ArrowRight, Filter, RefreshCw, Calendar, User, Save, Plus, HelpCircle } from "lucide-react";
 import { api, PREMIUM_BARBERS } from "../lib/api.js";
-import { Appointment, UserProfile, BusinessMetrics, AISuggestionResponse } from "../types.js";
+import { Appointment, UserProfile, BusinessMetrics, AISuggestionResponse, BarberInfo, ServiceItem } from "../types.js";
 
 interface BarberPanelProps {
   currentUser: UserProfile;
   onLogout: () => void;
 }
+
+const HOURLY_SLOTS = [
+  "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", 
+  "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"
+];
 
 export default function BarberPanel({ currentUser, onLogout }: BarberPanelProps) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -29,6 +34,30 @@ export default function BarberPanel({ currentUser, onLogout }: BarberPanelProps)
   const [barberFilter, setBarberFilter] = useState<string>("all");
   const [dayFilter, setDayFilter] = useState<"all" | "today">("today");
 
+  // Sub Tab Navigation
+  const [activeSubTab, setActiveSubTab] = useState<"dashboard" | "profile">("dashboard");
+
+  // Dynamic system catalogs
+  const [allServices, setAllServices] = useState<ServiceItem[]>([]);
+  const [allBarbers, setAllBarbers] = useState<BarberInfo[]>([]);
+
+  // Barber's own editable attributes
+  const [bio, setBio] = useState("");
+  const [specialty, setSpecialty] = useState("");
+  const [avatar, setAvatar] = useState("");
+  const [workingHours, setWorkingHours] = useState<string[]>([]);
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+
+  // New Service addition form states
+  const [showAddService, setShowAddService] = useState(false);
+  const [newServiceName, setNewServiceName] = useState("");
+  const [newServicePrice, setNewServicePrice] = useState("");
+  const [newServiceDuration, setNewServiceDuration] = useState("45");
+  const [newServiceDesc, setNewServiceDesc] = useState("");
+
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingService, setSavingService] = useState(false);
+
   useEffect(() => {
     loadDashboardData();
   }, []);
@@ -37,10 +66,12 @@ export default function BarberPanel({ currentUser, onLogout }: BarberPanelProps)
     setLoadingData(true);
     setGeneralError(null);
     try {
-      // Load both metrics & appointments
-      const [allAppts, barMetrics] = await Promise.all([
+      // Load both metrics & appointments & dynamic lists
+      const [allAppts, barMetrics, systemServices, systemBarbers] = await Promise.all([
         api.getAppointments(),
-        api.getBarberMetrics()
+        api.getBarberMetrics(),
+        api.getServices(),
+        api.getBarbers()
       ]);
 
       // Sort chronological
@@ -52,6 +83,25 @@ export default function BarberPanel({ currentUser, onLogout }: BarberPanelProps)
 
       setAppointments(allAppts);
       setMetrics(barMetrics);
+      setAllServices(systemServices);
+      setAllBarbers(systemBarbers);
+
+      // Find the logged-in barber profile
+      const myProfile = systemBarbers.find(b => b.id === currentUser.uid);
+      if (myProfile) {
+        setBio(myProfile.bio || "");
+        setSpecialty(myProfile.specialty || "Barbeiro Vanguard Sênior");
+        setAvatar(myProfile.avatar || "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?auto=format&fit=crop&q=80&w=300");
+        setWorkingHours(myProfile.workingHours || HOURLY_SLOTS);
+        setSelectedServices(myProfile.services || systemServices.map(s => s.id));
+      } else {
+        // If profile doesn't exist yet, we define default values
+        setBio("Dedicação total ao corte masculino fino e às melhores técnicas de barbearia contemporânea.");
+        setSpecialty("Barbeiro Sênior");
+        setAvatar("https://images.unsplash.com/photo-1540569014015-19a7be504e3a?auto=format&fit=crop&q=80&w=300");
+        setWorkingHours(HOURLY_SLOTS);
+        setSelectedServices(systemServices.map(s => s.id));
+      }
     } catch (err: any) {
       setGeneralError(err?.message || "Algo falhou ao carregar as métricas operacionais.");
     } finally {
@@ -80,6 +130,75 @@ export default function BarberPanel({ currentUser, onLogout }: BarberPanelProps)
       setTimeout(() => setSuccessToast(null), 4000);
     } catch (err: any) {
       setGeneralError(err?.message || "Não foi possível migrar status do agendamento.");
+    }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingProfile(true);
+    setGeneralError(null);
+    try {
+      await api.updateBarberProfile(currentUser.uid, {
+        name: currentUser.name,
+        specialty,
+        bio,
+        avatar: avatar || "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?auto=format&fit=crop&q=80&w=300",
+        workingHours,
+        services: selectedServices
+      });
+      setSuccessToast("Perfil, horários e serviços atualizados com requinte!");
+      await loadDashboardData();
+      setTimeout(() => setSuccessToast(null), 4000);
+    } catch (err: any) {
+      setGeneralError(err?.message || "Erro ao atualizar perfil do barbeiro.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleAddCustomService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newServiceName.trim()) return;
+    setSavingService(true);
+    try {
+      const added = await api.addCustomService({
+        name: newServiceName,
+        price: Number(newServicePrice) || 50,
+        durationMin: Number(newServiceDuration) || 30,
+        description: newServiceDesc || "Serviço personalizado de alta performance."
+      });
+
+      setSelectedServices(prev => [...prev, added.id]);
+      setSuccessToast(`Serviço "${newServiceName}" cadastrado no catálogo com sucesso!`);
+      
+      setNewServiceName("");
+      setNewServicePrice("");
+      setNewServiceDuration("45");
+      setNewServiceDesc("");
+      setShowAddService(false);
+
+      await loadDashboardData();
+      setTimeout(() => setSuccessToast(null), 4000);
+    } catch (err: any) {
+      setGeneralError(err?.message || "Erro ao cadastrar novo serviço.");
+    } finally {
+      setSavingService(false);
+    }
+  };
+
+  const toggleHourSlot = (hour: string) => {
+    if (workingHours.includes(hour)) {
+      setWorkingHours(prev => prev.filter(h => h !== hour));
+    } else {
+      setWorkingHours(prev => [...prev, hour].sort());
+    }
+  };
+
+  const toggleServiceOffer = (serviceId: string) => {
+    if (selectedServices.includes(serviceId)) {
+      setSelectedServices(prev => prev.filter(id => id !== serviceId));
+    } else {
+      setSelectedServices(prev => [...prev, serviceId]);
     }
   };
 
@@ -145,8 +264,36 @@ export default function BarberPanel({ currentUser, onLogout }: BarberPanelProps)
         </div>
       )}
 
-      {/* Overview Analytics Row */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      {/* Primary Sub Tabs */}
+      <div className="flex border-b border-white/5 mb-8">
+        <button
+          id="barber-subtab-dashboard"
+          onClick={() => setActiveSubTab("dashboard")}
+          className={`px-6 py-3.5 text-xs font-mono uppercase tracking-widest text-center transition-all border-b-2 cursor-pointer ${
+            activeSubTab === "dashboard"
+              ? "border-gold-500 text-gold-400 bg-white/[0.02]"
+              : "border-transparent text-gray-400 hover:text-gray-200"
+          }`}
+        >
+          Métricas & Agenda de Hoje
+        </button>
+        <button
+          id="barber-subtab-profile"
+          onClick={() => setActiveSubTab("profile")}
+          className={`px-6 py-3.5 text-xs font-mono uppercase tracking-widest text-center transition-all border-b-2 cursor-pointer ${
+            activeSubTab === "profile"
+              ? "border-gold-500 text-gold-400 bg-white/[0.02]"
+              : "border-transparent text-gray-400 hover:text-gray-200"
+          }`}
+        >
+          Configurações de Perfil & Atendimento
+        </button>
+      </div>
+
+      {activeSubTab === "dashboard" ? (
+        <>
+          {/* Overview Analytics Row */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         
         {/* STAT 1: Revenue */}
         <div id="metric-revenue" className="glass-panel p-6 rounded-2xl border-gold-glow border relative overflow-hidden">
@@ -470,6 +617,342 @@ export default function BarberPanel({ currentUser, onLogout }: BarberPanelProps)
         </div>
 
       </div>
+        </>
+      ) : (
+        <motion.div
+          id="barber-profile-section"
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="grid grid-cols-1 lg:grid-cols-5 gap-8"
+        >
+          {/* COLUMN 1: Basic aesthetic data (Specialty, Bio, Avatar Selection) */}
+          <div className="lg:col-span-2 space-y-6">
+            <div className="glass-panel p-6 rounded-2xl border-gold-glow border relative overflow-hidden">
+              <h3 className="font-serif text-lg text-gold-300 uppercase tracking-wider border-b border-white/5 pb-3 mb-6 flex items-center gap-2">
+                <User className="w-5 h-5 text-gold-400" /> Identidade de Estilo
+              </h3>
+
+              <form onSubmit={handleSaveProfile} className="space-y-6">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-gray-400 font-mono mb-2">
+                    Especialidade / Título Profissional
+                  </label>
+                  <input
+                    id="barber-specialty-input"
+                    type="text"
+                    required
+                    placeholder="Ex: Master Barber, Especialista em Navalha"
+                    value={specialty}
+                    onChange={(e) => setSpecialty(e.target.value)}
+                    className="w-full bg-black/40 border border-white/5 rounded-xl py-3 px-4 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gold-500/40 transition-all font-sans"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-gray-400 font-mono mb-2">
+                    Sua Biografia e Filosofia de Corte
+                  </label>
+                  <textarea
+                    id="barber-bio-textarea"
+                    rows={4}
+                    required
+                    placeholder="Descreva seu estilo, técnicas preferidas e sofisticação de atendimento aos cavalheiros..."
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    className="w-full bg-black/40 border border-white/5 rounded-xl py-3 px-4 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gold-500/40 transition-all font-sans leading-relaxed resize-none cursor-text"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-gray-400 font-mono mb-2">
+                    Foto de Perfil (Avatar URL)
+                  </label>
+                  <input
+                    id="barber-avatar-input"
+                    type="text"
+                    placeholder="URL de uma foto em alta..."
+                    value={avatar}
+                    onChange={(e) => setAvatar(e.target.value)}
+                    className="w-full bg-black/40 border border-white/5 rounded-xl py-3 px-4 text-xs text-gray-300 placeholder-gray-600 focus:outline-none focus:border-gold-500/40 transition-all font-mono"
+                  />
+                  <p className="text-[9px] text-gray-500 font-sans mt-2">
+                    Insira uma URL externa ou use um de nossos modelos de retrato executivo sugeridos abaixo.
+                  </p>
+                  
+                  {/* Avatar selection presets */}
+                  <div className="flex gap-2.5 mt-3 justify-start overflow-x-auto pb-1">
+                    {[
+                      "https://images.unsplash.com/photo-1503951914875-452162b0f3f1",
+                      "https://images.unsplash.com/photo-1517832606589-7a598b38927e",
+                      "https://images.unsplash.com/photo-1605462863863-10d9e47e15ee",
+                      "https://images.unsplash.com/photo-1540569014015-19a7be504e3a",
+                      "https://images.unsplash.com/photo-1534528741775-53994a69daeb"
+                    ].map((imgUrl, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setAvatar(`${imgUrl}?auto=format&fit=crop&q=80&w=300`)}
+                        className={`w-10 h-10 rounded-full overflow-hidden border transition-all shrink-0 ${
+                          avatar.includes(imgUrl) ? "border-gold-400 scale-105 shadow-[0_0_10px_rgba(197,168,128,0.5)]" : "border-white/10 hover:border-white/30"
+                        }`}
+                      >
+                        <img referrerPolicy="no-referrer" src={`${imgUrl}?auto=format&fit=crop&q=80&w=70`} alt="Preset avatar preview" className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-white/5 pt-4">
+                  <button
+                    id="barber-save-profile-btn"
+                    type="submit"
+                    disabled={savingProfile}
+                    className="w-full py-3.5 px-4 bg-gradient-to-r from-gold-600 to-gold-400 border border-gold-300/20 rounded-xl text-black font-semibold text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {savingProfile ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-black" /> Salvando...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 text-black" /> Salvar Identidade
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          {/* COLUMN 2: Performance configuration - Hourly Availability & Products offered */}
+          <div className="lg:col-span-3 space-y-6">
+            
+            {/* Hour Schedule Settings */}
+            <div className="glass-panel p-6 rounded-2xl border-gold-glow border">
+              <h3 className="font-serif text-lg text-gold-300 uppercase tracking-wider border-b border-white/5 pb-3 mb-4 flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-gold-400" /> Agenda Operacional
+                </span>
+                <span className="text-[10px] font-mono text-gold-400/80 uppercase tracking-widest pr-1">
+                  {workingHours.length} Slots Ativos
+                </span>
+              </h3>
+              <p className="text-xs text-gray-400 mb-6">
+                Selecione as faixas de horário em que você estará disponível para receber agendamentos de clientes na Vanguard. Se desmarcar um horário (por exemplo, almoço), o cliente não poderá reservar você nessa faixa.
+              </p>
+
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                {HOURLY_SLOTS.map(hour => {
+                  const isActive = workingHours.includes(hour);
+                  return (
+                    <button
+                      key={hour}
+                      id={`hour-chip-${hour}`}
+                      type="button"
+                      onClick={() => toggleHourSlot(hour)}
+                      className={`py-3 px-4 rounded-xl text-xs font-mono font-medium transition-all border text-center cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
+                        isActive
+                          ? "border-gold-500 bg-gold-950/20 text-gold-300 shadow-[0_0_12px_rgba(197,168,128,0.15)]"
+                          : "border-white/5 bg-transparent text-gray-500 hover:border-white/10 hover:text-gray-300"
+                      }`}
+                    >
+                      <span className="text-[13px] tracking-wider">{hour}</span>
+                      <span className={`text-[8px] font-mono tracking-widest uppercase ${isActive ? "text-gold-400" : "text-gray-600"}`}>
+                        {isActive ? "Ativo" : "Pausa"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Products & Services Offered */}
+            <div className="glass-panel p-6 rounded-2xl border-gold-glow border">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/5 pb-3 mb-4 gap-3">
+                <h3 className="font-serif text-lg text-gold-300 uppercase tracking-wider flex items-center gap-2">
+                  <Scissors className="w-5 h-5 text-gold-400" /> Produtos & Serviços Prestados
+                </h3>
+                <button
+                  id="barber-toggle-add-service-btn"
+                  type="button"
+                  onClick={() => setShowAddService(!showAddService)}
+                  className="px-3.5 py-1.5 rounded-lg border border-gold-500/20 bg-gold-950/25 text-gold-400 hover:bg-gold-500 hover:text-black hover:border-gold-400 text-[10px] font-mono tracking-wider uppercase transition-all flex items-center gap-1.5 cursor-pointer ml-auto sm:ml-0"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Criar Novo Produto / Serviço
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 mb-6">
+                Gerencie quais produtos e rituais de estética você aceita prestar. Apenas rituais marcados abaixo serão oferecidos aos clientes no momento de agendamento em seu perfil.
+              </p>
+
+              {/* Add Custom Service Form */}
+              <AnimatePresence>
+                {showAddService && (
+                  <motion.form
+                    id="new-service-form"
+                    onSubmit={handleAddCustomService}
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mb-6 p-5 rounded-xl border border-gold-500/15 bg-gold-950/10 space-y-4 overflow-hidden"
+                  >
+                    <div className="flex items-center gap-2 text-gold-400 mb-2 border-b border-white/5 pb-1.5">
+                      <Plus className="w-4 h-4 text-gold-400" />
+                      <span className="text-[11px] font-mono uppercase tracking-widest font-semibold">Novo Ritual Vanguard</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="md:col-span-2">
+                        <label className="block text-[9px] uppercase tracking-widest text-gray-400 font-mono mb-1.5">
+                          Nome do Serviço / Produto
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Ex: Alinhamento de Fios Prime"
+                          value={newServiceName}
+                          onChange={(e) => setNewServiceName(e.target.value)}
+                          className="w-full bg-black/50 border border-white/5 rounded-lg py-2 px-3 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gold-500/40"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] uppercase tracking-widest text-gray-400 font-mono mb-1.5">
+                          Preço do Ritual (R$)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          required
+                          placeholder="Ex: 150.00"
+                          value={newServicePrice}
+                          onChange={(e) => setNewServicePrice(e.target.value)}
+                          className="w-full bg-black/50 border border-white/5 rounded-lg py-2 px-3 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gold-500/40 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-[9px] uppercase tracking-widest text-gray-400 font-mono mb-1.5">
+                          Duração Média (Minutos)
+                        </label>
+                        <select
+                          value={newServiceDuration}
+                          onChange={(e) => setNewServiceDuration(e.target.value)}
+                          className="w-full bg-black/50 border border-white/5 rounded-lg py-2 px-3 text-xs text-gray-200 focus:outline-none focus:border-gold-500/40 font-mono cursor-pointer"
+                        >
+                          <option value="15">15 Minutos</option>
+                          <option value="30">30 Minutos</option>
+                          <option value="45">45 Minutos</option>
+                          <option value="60">1h (60 Min)</option>
+                          <option value="75">1h15 (75 Min)</option>
+                          <option value="90">1h30 (90 Min)</option>
+                        </select>
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-[9px] uppercase tracking-widest text-gray-400 font-mono mb-1.5">
+                          Breve Descrição Sensoriais
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          maxLength={120}
+                          placeholder="Ex: Rápido alinhamento capilar com óleos premium de argan."
+                          value={newServiceDesc}
+                          onChange={(e) => setNewServiceDesc(e.target.value)}
+                          className="w-full bg-black/50 border border-white/5 rounded-lg py-2 px-3 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gold-500/40"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2.5 justify-end pt-2 border-t border-white/5">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddService(false)}
+                        className="px-3.5 py-1.5 rounded-lg border border-white/5 text-gray-400 text-[10px] font-mono tracking-wider uppercase hover:bg-white/[0.04] cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={savingService}
+                        className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-gold-600 to-gold-400 text-black text-[10px] font-mono tracking-wider font-semibold uppercase hover:shadow-[0_4px_15px_rgba(197,168,128,0.2)] cursor-pointer disabled:opacity-50"
+                      >
+                        {savingService ? "Cadastrando..." : "Confirmar Criação"}
+                      </button>
+                    </div>
+                  </motion.form>
+                )}
+              </AnimatePresence>
+
+              {/* Service Cards List */}
+              <div className="space-y-3.5">
+                {allServices.map(service => {
+                  const isChecked = selectedServices.includes(service.id);
+                  return (
+                    <div
+                      key={service.id}
+                      onClick={() => toggleServiceOffer(service.id)}
+                      className={`p-4 rounded-xl border transition-all cursor-pointer flex items-start gap-4 ${
+                        isChecked
+                          ? "border-gold-500/40 bg-gold-950/5 font-semibold text-gradient-gold"
+                          : "border-white/5 bg-transparent hover:border-white/10"
+                      }`}
+                    >
+                      <div className="mt-1">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {}} // toggled via parent div click
+                          className="w-4 h-4 rounded border-gray-600 text-gold-500 focus:ring-gold-500 focus:ring-opacity-25 bg-neutral-900 cursor-pointer"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex justify-between items-baseline">
+                          <h4 className={`text-xs font-semibold tracking-wider font-mono ${isChecked ? "text-gold-300" : "text-gray-300"}`}>
+                            {service.name.toUpperCase()}
+                          </h4>
+                          <span className="text-[11px] font-mono text-gold-400 font-bold">
+                            R$ {service.price.toFixed(2)}
+                          </span>
+                        </div>
+                        <p className="text-[10.5px] text-gray-500 mt-1 pl-0.5 leading-relaxed font-sans">
+                          {service.description}
+                        </p>
+                        <div className="mt-2.5 flex gap-2 items-center text-[9px] font-mono uppercase tracking-widest text-gold-400/60 pl-0.5">
+                          <Clock className="w-3.5 h-3.5" /> Duração: {service.durationMin} Minutos
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Save All service settings trigger */}
+              <div className="mt-6 border-t border-white/5 pt-5 text-right">
+                <button
+                  id="barber-save-services-btn"
+                  onClick={handleSaveProfile}
+                  disabled={savingProfile}
+                  className="px-6 py-3.5 bg-gradient-to-r from-gold-600 to-gold-400 border border-gold-300/20 rounded-xl text-black font-semibold text-xs tracking-widest uppercase transition-all flex items-center gap-2 cursor-pointer ml-auto disabled:opacity-50"
+                >
+                  {savingProfile ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-black" /> Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 text-black" /> Salvar Agenda & Serviços
+                    </>
+                  )}
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+        </motion.div>
+      )}
 
     </div>
   );

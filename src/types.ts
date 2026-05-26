@@ -38,10 +38,12 @@ export interface Appointment {
 export interface BarberInfo {
   id: string;
   name: string;
-  email: string;
+  email?: string;
   avatar: string;
   specialty: string;
-  bio: string;
+  bio?: string;
+  workingHours?: string[]; // e.g., ["08:00", "09:00", ...]
+  services?: string[]; // list of ServiceItem ids offered
 }
 
 export interface ServiceItem {

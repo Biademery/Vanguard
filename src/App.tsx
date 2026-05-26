@@ -4,19 +4,17 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { Scissors, Layers, CheckSquare } from "lucide-react";
+import { Scissors } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { api } from "./lib/api.js";
 import { UserProfile } from "./types.js";
 import AuthScreen from "./components/AuthScreen.js";
 import CustomerPanel from "./components/CustomerPanel.js";
 import BarberPanel from "./components/BarberPanel.js";
-import AgileHub from "./components/AgileHub.js";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [appReady, setAppReady] = useState(false);
-  const [viewingAgileHub, setViewingAgileHub] = useState(false);
 
   useEffect(() => {
     // Check if user session already exists in localStorage
@@ -34,7 +32,6 @@ export default function App() {
   const handleLogout = () => {
     api.clearToken();
     setCurrentUser(null);
-    setViewingAgileHub(false);
   };
 
   if (!appReady) {
@@ -62,14 +59,6 @@ export default function App() {
             <span className="font-serif text-lg tracking-[0.25em] text-gradient-gold font-bold">VANGUARD</span>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              id="toggle-agile-view"
-              onClick={() => setViewingAgileHub(!viewingAgileHub)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gold-500/20 bg-gold-400/5 text-[10px] font-mono uppercase tracking-wider text-gold-400 hover:bg-gold-400/20 transition-all cursor-pointer"
-            >
-              <Layers className="w-3.5 h-3.5" />
-              {viewingAgileHub ? "Sistema Barbearia" : "Relatório & Cards Ágeis"}
-            </button>
             <div className="hidden sm:flex items-center gap-2">
               <span className="inline-block w-2 h-2 rounded-full bg-gold-400 animate-pulse" />
               <span className="text-[9px] font-mono uppercase text-gold-400/80 tracking-widest">Premium Salon Hub</span>
@@ -81,17 +70,7 @@ export default function App() {
       {/* Main Core View Area */}
       <main className="flex-grow w-full relative">
         <AnimatePresence mode="wait">
-          {viewingAgileHub ? (
-            <motion.div
-              key="agile-hub"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <AgileHub />
-            </motion.div>
-          ) : !currentUser ? (
+          {!currentUser ? (
             <motion.div
               key="auth"
               initial={{ opacity: 0 }}

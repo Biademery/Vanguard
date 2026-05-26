@@ -6,8 +6,8 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Calendar, Clock, Sparkles, UserCheck, CheckCircle, AlertTriangle, XCircle, LogOut, Scissors, RefreshCw } from "lucide-react";
-import { api, PREMIUM_BARBERS, PREMIUM_SERVICES } from "../lib/api.js";
-import { Appointment, UserProfile } from "../types.js";
+import { api } from "../lib/api.js";
+import { Appointment, UserProfile, BarberInfo, ServiceItem } from "../types.js";
 
 interface CustomerPanelProps {
   currentUser: UserProfile;
@@ -20,9 +20,13 @@ export default function CustomerPanel({ currentUser, onLogout }: CustomerPanelPr
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Dynamic Catalogs
+  const [allBarbers, setAllBarbers] = useState<BarberInfo[]>([]);
+  const [allServices, setAllServices] = useState<ServiceItem[]>([]);
+
   // New Appointment Fields
-  const [selectedBarber, setSelectedBarber] = useState(PREMIUM_BARBERS[0]);
-  const [selectedService, setSelectedService] = useState(PREMIUM_SERVICES[0]);
+  const [selectedBarber, setSelectedBarber] = useState<BarberInfo | null>(null);
+  const [selectedService, setSelectedService] = useState<ServiceItem | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [selectedTime, setSelectedTime] = useState<string>("");
 
@@ -34,6 +38,12 @@ export default function CustomerPanel({ currentUser, onLogout }: CustomerPanelPr
 
   // 14 days list generation
   const [daysList, setDaysList] = useState<{ dateStr: string; label: string; weekday: string }[]>([]);
+
+  // Default Hourly slots fallback
+  const HOURLY_SLOTS = [
+    "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", 
+    "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"
+  ];
 
   useEffect(() => {
     // Generate next 14 days lists YYYY-MM-DD
@@ -50,15 +60,52 @@ export default function CustomerPanel({ currentUser, onLogout }: CustomerPanelPr
     setDaysList(list);
     setSelectedDate(list[0].dateStr); // defaults to today
 
-    loadClientAppointments();
+    loadClientAndCatalogsData();
   }, []);
+
+  const loadClientAndCatalogsData = async () => {
+    setLoadingAppts(true);
+    setErrorMsg(null);
+    try {
+      const [activeList, barbersList, servicesList] = await Promise.all([
+        api.getAppointments(),
+        api.getBarbers(),
+        api.getServices()
+      ]);
+
+      // sort by date & time descending
+      activeList.sort((a, b) => {
+        const datetimeA = new Date(`${a.date}T${a.time}`);
+        const datetimeB = new Date(`${b.date}T${b.time}`);
+        return datetimeB.getTime() - datetimeA.getTime();
+      });
+      setAppointments(activeList);
+      setAllBarbers(barbersList);
+      setAllServices(servicesList);
+
+      if (barbersList.length > 0) {
+        setSelectedBarber(barbersList[0]);
+        // Default to first service offered by first barber if any
+        const firstBarberServices = barbersList[0].services || [];
+        const possibleServices = servicesList.filter(s => firstBarberServices.includes(s.id));
+        if (possibleServices.length > 0) {
+          setSelectedService(possibleServices[0]);
+        } else if (servicesList.length > 0) {
+          setSelectedService(servicesList[0]);
+        }
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Não foi possível resgatar o histórico de atendimentos e catálogo.");
+    } finally {
+      setLoadingAppts(false);
+    }
+  };
 
   const loadClientAppointments = async () => {
     setLoadingAppts(true);
     setErrorMsg(null);
     try {
       const activeList = await api.getAppointments();
-      // sort by date & time descending
       activeList.sort((a, b) => {
         const datetimeA = new Date(`${a.date}T${a.time}`);
         const datetimeB = new Date(`${b.date}T${b.time}`);
@@ -72,14 +119,23 @@ export default function CustomerPanel({ currentUser, onLogout }: CustomerPanelPr
     }
   };
 
-  // Pre-generate hours slots 08:00 to 21:00 inclusive
-  const HOURLY_SLOTS = [
-    "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", 
-    "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"
-  ];
+  const getBarberHours = (barber: BarberInfo | null): string[] => {
+    if (barber && barber.workingHours && barber.workingHours.length > 0) {
+      return barber.workingHours;
+    }
+    return HOURLY_SLOTS;
+  };
+
+  const getBarberServices = (barber: BarberInfo | null): ServiceItem[] => {
+    if (!barber) return [];
+    if (barber.services && barber.services.length > 0) {
+      return allServices.filter(s => barber.services?.includes(s.id));
+    }
+    return allServices;
+  };
 
   // Client-side helper check if slot is disabled (elapsed today or pre-existing booking)
-  const isSlotDisabled = (date: string, time: string, ignoringAppointmentId: string | null = null): { disabled: boolean; reason?: string } => {
+  const isSlotDisabled = (date: string, time: string, ignoringAppointmentId: string | null = null, forceBarberId: string | null = null): { disabled: boolean; reason?: string } => {
     // Today constraints: cannot book hours that passed
     const todayStr = new Date().toISOString().split("T")[0];
     if (date === todayStr) {
@@ -91,9 +147,11 @@ export default function CustomerPanel({ currentUser, onLogout }: CustomerPanelPr
       }
     }
 
+    const targetBarberId = forceBarberId || (reschedulingId ? appointments.find(a => a.id === reschedulingId)?.barberId : selectedBarber?.id);
+
     // Schedule collision with any active other appointment (status !== cancelled)
     const activeCollision = appointments.find(appt => 
-      appt.barberId === (reschedulingId ? appointments.find(a=>a.id===reschedulingId)?.barberId : selectedBarber.id) &&
+      appt.barberId === targetBarberId &&
       appt.date === date &&
       appt.time === time &&
       appt.status !== "cancelled" &&
@@ -101,7 +159,7 @@ export default function CustomerPanel({ currentUser, onLogout }: CustomerPanelPr
     );
 
     if (activeCollision) {
-      return { disabled: true, reason: "Reservado" };
+      return { disabled: true, reason: "Indisponível" };
     }
 
     return { disabled: false };
@@ -109,8 +167,8 @@ export default function CustomerPanel({ currentUser, onLogout }: CustomerPanelPr
 
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTime) {
-      setErrorMsg("Selecione um horário disponível da grade abaixo.");
+    if (!selectedTime || !selectedBarber || !selectedService) {
+      setErrorMsg("Selecione um barbeiro, serviço e horário disponível da grade abaixo.");
       return;
     }
     
@@ -225,17 +283,26 @@ export default function CustomerPanel({ currentUser, onLogout }: CustomerPanelPr
                   Selecione o Barbeiro de Confiança
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {PREMIUM_BARBERS.map(barber => {
-                    const isSelected = selectedBarber.id === barber.id;
+                  {allBarbers.map(barber => {
+                    const isSelected = selectedBarber?.id === barber.id;
                     return (
                       <button
                         id={`barber-card-${barber.id}`}
                         key={barber.id}
                         type="button"
-                        onClick={() => { setSelectedBarber(barber); setSelectedTime(""); }}
+                        onClick={() => { 
+                          setSelectedBarber(barber); 
+                          setSelectedTime(""); 
+                          // Set default service offered by new barber
+                          const currentBarberServices = getBarberServices(barber);
+                          if (currentBarberServices.length > 0) {
+                            setSelectedService(currentBarberServices[0]);
+                          }
+                        }}
                         className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer ${isSelected ? "border-gold-400 bg-gold-950/20" : "border-white/5 bg-transparent hover:border-white/10"}`}
                       >
                         <img 
+                          referrerPolicy="no-referrer"
                           src={barber.avatar} 
                           alt={barber.name} 
                           className="w-10 h-10 rounded-full object-cover mb-2.5 border border-gold-300/10"
@@ -254,8 +321,8 @@ export default function CustomerPanel({ currentUser, onLogout }: CustomerPanelPr
                   Selecione a Experiência Aromática
                 </label>
                 <div className="grid grid-cols-1 gap-2.5">
-                  {PREMIUM_SERVICES.map(service => {
-                    const isSelected = selectedService.id === service.id;
+                  {getBarberServices(selectedBarber).map(service => {
+                    const isSelected = selectedService?.id === service.id;
                     return (
                       <button
                         id={`service-item-${service.id}`}
@@ -265,8 +332,8 @@ export default function CustomerPanel({ currentUser, onLogout }: CustomerPanelPr
                         className={`text-left p-4 rounded-xl border flex justify-between items-center transition-all cursor-pointer ${isSelected ? "border-gold-400 bg-gold-950/25" : "border-white/5 bg-transparent hover:bg-white/[0.02]"}`}
                       >
                         <div className="max-w-[75%]">
-                          <h4 className="text-sm font-semibold text-gray-200 flex items-center gap-1.5">
-                            {service.name}
+                          <h4 className="text-sm font-semibold text-gray-200 flex items-center gap-1.5 font-mono tracking-wider">
+                            {service.name.toUpperCase()}
                             {isSelected && <Sparkles className="w-3.5 h-3.5 text-gold-400 fill-gold-400" />}
                           </h4>
                           <p className="text-[11px] text-gray-400 mt-1 leading-normal font-sans">{service.description}</p>
@@ -311,11 +378,11 @@ export default function CustomerPanel({ currentUser, onLogout }: CustomerPanelPr
                   <label className="block text-[11px] uppercase tracking-widest text-gold-300/40 font-mono">
                     Grade Horária Disponível
                   </label>
-                  <span className="text-[10px] text-gray-500 font-mono">Grade: 08:00 - 21:00 de hora em hora</span>
+                  <span className="text-[10px] text-gray-500 font-mono uppercase tracking-wider">Exibindo faixas de atendimento de {selectedBarber?.name || ""}</span>
                 </div>
 
                 <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
-                  {HOURLY_SLOTS.map(time => {
+                  {getBarberHours(selectedBarber).map(time => {
                     const { disabled, reason } = isSlotDisabled(selectedDate, time);
                     const isSelected = selectedTime === time;
 

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { AuthResponse, UserProfile, Appointment, BusinessMetrics, AISuggestionResponse } from "../types.js";
+import { AuthResponse, UserProfile, Appointment, BusinessMetrics, AISuggestionResponse, BarberInfo, ServiceItem } from "../types.js";
 
 const BASE_URL = "";
 
@@ -44,6 +44,74 @@ function initLocalDb(): void {
       role: "barber",
       password: "vanguard123",
       createdAt: new Date().toISOString()
+    }
+  ];
+
+  const defaultServices = [
+    {
+      id: "s1",
+      name: "Corte Vanguard Classic",
+      price: 120.00,
+      durationMin: 45,
+      description: "Corte artesanal refinado com visagismo completo, lavagem premium e finalização estilizada."
+    },
+    {
+      id: "s2",
+      name: "Barba Termosellada Imperial",
+      price: 90.00,
+      durationMin: 45,
+      description: "Navalha de alta precisão com aplicação de óleos aromáticos, toalha quente vaporizada e balms restauradores."
+    },
+    {
+      id: "s3",
+      name: "Vanguard Signature Combo",
+      price: 190.00,
+      durationMin: 75,
+      description: "O ritual definitivo do cavalheiro moderno. Unificação do Corte Vanguard com a Barba Termosellada Imperial."
+    },
+    {
+      id: "s4",
+      name: "Alinhamento de Fios & Tonalização",
+      price: 150.00,
+      durationMin: 60,
+      description: "Restauração de fisionomia masculina por meio de redução de frizz capilar e camuflagem sutil de fios brancos."
+    },
+    {
+      id: "s5",
+      name: "Aromaterapia & Massagem Capilar",
+      price: 80.00,
+      durationMin: 30,
+      description: "Massagem craniana profunda relaxante sob efeito de óleos essenciais selecionados."
+    }
+  ];
+
+  const defaultBarbers = [
+    {
+      id: "barber-1",
+      name: "Diego Cavalcanti",
+      specialty: "Master Barber - Cortes de Precisão e Barbas Clássicas",
+      avatar: "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&q=80&w=300",
+      bio: "Especialista em visagismo de luxo com mais de uma década de dedicação ao estilo clássico.",
+      workingHours: ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"],
+      services: ["s1", "s2", "s3", "s4", "s5"]
+    },
+    {
+      id: "barber-2",
+      name: "Marcus Fontes",
+      specialty: "Barbeiro Sênior - Barbaterapia e Terapias Capilares",
+      avatar: "https://images.unsplash.com/photo-1517832606589-7a598b38927e?auto=format&fit=crop&q=80&w=300",
+      bio: "Referência em processos de hidratação a vapor e tratamentos faciais energizantes.",
+      workingHours: ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"],
+      services: ["s1", "s2", "s3", "s5"]
+    },
+    {
+      id: "barber-3",
+      name: "Enzo Alencar",
+      specialty: "Hair Stylist - Cortes Modernos e Alinhamentos",
+      avatar: "https://images.unsplash.com/photo-1605462863863-10d9e47e15ee?auto=format&fit=crop&q=80&w=300",
+      bio: "Focado em degradês geométricos e estilizações contemporâneas de alta fidelidade.",
+      workingHours: ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"],
+      services: ["s1", "s2", "s4"]
     }
   ];
 
@@ -111,6 +179,8 @@ function initLocalDb(): void {
   ];
 
   localStorage.setItem("vanguard_users", JSON.stringify(defaultUsers));
+  localStorage.setItem("vanguard_services", JSON.stringify(defaultServices));
+  localStorage.setItem("vanguard_barber_profiles", JSON.stringify(defaultBarbers));
   localStorage.setItem("vanguard_appointments", JSON.stringify(defaultAppts));
   localStorage.setItem("vanguard_local_init", "true");
 }
@@ -167,6 +237,21 @@ const mockService = {
 
     users.push(newUser);
     localStorage.setItem("vanguard_users", JSON.stringify(users));
+
+    if (role === "barber") {
+      const barberProfiles = JSON.parse(localStorage.getItem("vanguard_barber_profiles") || "[]");
+      barberProfiles.push({
+        id: uid,
+        name: name,
+        email: emailLower,
+        specialty: "Barbeiro Sênior - Estilo & Visagismo Vanguard",
+        avatar: "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?auto=format&fit=crop&q=80&w=300",
+        bio: "Dedicação total ao corte masculino fino e às melhores técnicas de barbearia contemporânea.",
+        workingHours: ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"],
+        services: ["s1", "s2", "s3", "s4", "s5"]
+      });
+      localStorage.setItem("vanguard_barber_profiles", JSON.stringify(barberProfiles));
+    }
 
     const token = "mock-jwt-" + Math.random().toString(36).substring(2, 11);
     api.setToken(token);
@@ -543,6 +628,59 @@ export const api = {
       localStorage.setItem("vanguard_force_local", "true");
       return mockService.getGeminiAdvice();
     }
+  },
+
+  getBarbers: async (): Promise<BarberInfo[]> => {
+    initLocalDb();
+    const stored = localStorage.getItem("vanguard_barber_profiles");
+    return stored ? JSON.parse(stored) : PREMIUM_BARBERS;
+  },
+
+  getServices: async (): Promise<ServiceItem[]> => {
+    initLocalDb();
+    const stored = localStorage.getItem("vanguard_services");
+    return stored ? JSON.parse(stored) : PREMIUM_SERVICES;
+  },
+
+  updateBarberProfile: async (id: string, updates: Partial<BarberInfo>): Promise<BarberInfo> => {
+    initLocalDb();
+    const stored = localStorage.getItem("vanguard_barber_profiles");
+    const list: BarberInfo[] = stored ? JSON.parse(stored) : [];
+    const idx = list.findIndex(b => b.id === id);
+    if (idx === -1) {
+      const curUser = api.getCurrentUser();
+      const newProfile: BarberInfo = {
+        id,
+        name: curUser?.name || "Novo Barbeiro",
+        email: curUser?.email || "",
+        avatar: "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?auto=format&fit=crop&q=80&w=300",
+        specialty: "Barbeiro Sênior",
+        bio: "Especialista em visagismo de luxo na barbearia Vanguard.",
+        workingHours: ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"],
+        services: ["s1", "s2", "s3", "s4", "s5"],
+        ...updates
+      };
+      list.push(newProfile);
+      localStorage.setItem("vanguard_barber_profiles", JSON.stringify(list));
+      return newProfile;
+    }
+    list[idx] = { ...list[idx], ...updates };
+    localStorage.setItem("vanguard_barber_profiles", JSON.stringify(list));
+    return list[idx];
+  },
+
+  addCustomService: async (serviceData: Omit<ServiceItem, 'id'>): Promise<ServiceItem> => {
+    initLocalDb();
+    const stored = localStorage.getItem("vanguard_services");
+    const list: ServiceItem[] = stored ? JSON.parse(stored) : [];
+    const newId = "s" + (list.length + 1);
+    const newService: ServiceItem = {
+      id: newId,
+      ...serviceData
+    };
+    list.push(newService);
+    localStorage.setItem("vanguard_services", JSON.stringify(list));
+    return newService;
   }
 };
 
@@ -589,19 +727,31 @@ export const PREMIUM_BARBERS = [
   {
     id: "barber-1",
     name: "Diego Cavalcanti",
+    email: "diego@vanguard.com",
     specialty: "Master Barber - Cortes de Precisão e Barbas Clássicas",
-    avatar: "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&q=80&w=300"
+    bio: "Especialista em visagismo clássico de alto padrão. Mais de 10 anos lapidando a fisionomia masculina com maestria e navalhas cirúrgicas.",
+    avatar: "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&q=80&w=300",
+    workingHours: ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"],
+    services: ["s1", "s2", "s3", "s4", "s5"]
   },
   {
     id: "barber-2",
     name: "Marcus Fontes",
+    email: "marcus@vanguard.com",
     specialty: "Barbeiro Sênior - Barbaterapia e Terapias Capilares",
-    avatar: "https://images.unsplash.com/photo-1517832606589-7a598b38927e?auto=format&fit=crop&q=80&w=300"
+    bio: "Pioneiro em tratamentos de bem-estar masculinos, rituais térmicos vaporizados e cuidados essenciais da raiz capilar.",
+    avatar: "https://images.unsplash.com/photo-1517832606589-7a598b38927e?auto=format&fit=crop&q=80&w=300",
+    workingHours: ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"],
+    services: ["s1", "s2", "s3", "s5"]
   },
   {
     id: "barber-3",
     name: "Enzo Alencar",
+    email: "enzo@vanguard.com",
     specialty: "Hair Stylist - Cortes Modernos e Alinhamentos",
-    avatar: "https://images.unsplash.com/photo-1605462863863-10d9e47e15ee?auto=format&fit=crop&q=80&w=300"
+    bio: "Especialista em tendências contemporâneas, texturização de alta performance e engenharia do corte moderno.",
+    avatar: "https://images.unsplash.com/photo-1605462863863-10d9e47e15ee?auto=format&fit=crop&q=80&w=300",
+    workingHours: ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"],
+    services: ["s1", "s3", "s4"]
   }
 ];

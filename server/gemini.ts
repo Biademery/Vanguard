@@ -62,31 +62,16 @@ Por favor, forneça sua análise executiva premium e seu plano de ação de vend
   }
 
   try {
-    // We try 'gemini-3-flash-preview' first as requested by USER
-    // and seamlessly fall back to 'gemini-3.5-flash' if it fails in the setup.
-    let insightText = "";
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: dataOverviewPrompt,
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTIONS,
-          temperature: 0.7,
-        }
-      });
-      insightText = response.text || "";
-    } catch (previewErr) {
-      console.warn("gemini-3-flash-preview model not available or error occurred. Attempting robust fallback to gemini-3.5-flash.", previewErr);
-      const responseFallback = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: dataOverviewPrompt,
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTIONS,
-          temperature: 0.7,
-        }
-      });
-      insightText = responseFallback.text || "";
-    }
+    // Standard basic text tasks: gemini-3.5-flash
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: dataOverviewPrompt,
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTIONS,
+        temperature: 0.7,
+      }
+    });
+    const insightText = response.text || "";
 
     if (insightText.trim().length > 0) {
       return insightText;

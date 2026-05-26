@@ -46,20 +46,6 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
     }
   };
 
-  // Pre-fill fields for easy evaluation and access (Seeded barbers have password: "vanguard123")
-  const fillBarberDemo = () => {
-    setIsLogin(true);
-    setEmail("diego@vanguard.com");
-    setPassword("vanguard123");
-    setRole("barber");
-  };
-
-  const fillCustomerDemo = () => {
-    setIsLogin(true);
-    setEmail("geraldo@vanguard.com");
-    setPassword("vanguard123");
-    setRole("customer");
-  };
 
   return (
     <div id="auth-container" className="min-h-screen bg-radial-luxury flex items-center justify-center p-4 relative overflow-hidden">
@@ -112,25 +98,6 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           </button>
         </div>
 
-        {/* Demo Fast Access Buttons */}
-        <div className="flex gap-2 justify-center mb-6">
-          <button
-            id="btn-demo-barber"
-            type="button"
-            onClick={fillBarberDemo}
-            className="px-3 py-1 text-[10px] font-mono tracking-wider uppercase bg-gold-950/30 text-gold-400 outline outline-1 outline-gold-600/30 rounded-md hover:outline-gold-400/50 transition-all flex items-center gap-1 cursor-pointer"
-          >
-            <Shield className="w-3 h-3" /> Barber Demo
-          </button>
-          <button
-            id="btn-demo-customer"
-            type="button"
-            onClick={fillCustomerDemo}
-            className="px-3 py-1 text-[10px] font-mono tracking-wider uppercase bg-gold-950/30 text-gold-400 outline outline-1 outline-gold-600/30 rounded-md hover:outline-gold-400/50 transition-all flex items-center gap-1 cursor-pointer"
-          >
-            <UserCheck className="w-3 h-3" /> Customer Demo
-          </button>
-        </div>
 
         {/* Error message */}
         {error && (
