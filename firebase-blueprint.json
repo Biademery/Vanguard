@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Premium customer or barber staff profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique user ID" },
+        "name": { "type": "string", "description": "User's display name" },
+        "email": { "type": "string", "description": "User's registered email address" },
+        "role": { "type": "string", "enum": ["barber", "customer"], "description": "Role determining permissions" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "Appointment": {
+      "title": "Appointment",
+      "description": "Scheduled haircut or treatment session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique appointment ID" },
+        "barberId": { "type": "string", "description": "ID of the assigned barber" },
+        "barberName": { "type": "string", "description": "Name of the assigned barber" },
+        "customerId": { "type": "string", "description": "ID of the customer who booked" },
+        "customerName": { "type": "string", "description": "Name of the customer who booked" },
+        "service": { "type": "string", "description": "The specific grooming service requested" },
+        "price": { "type": "number", "description": "Price in Reais (R$)" },
+        "date": { "type": "string", "description": "Date of appointment (YYYY-MM-DD)" },
+        "time": { "type": "string", "description": "Time slot of appointment (HH:MM)" },
+        "status": { "type": "string", "enum": ["scheduled", "in-progress", "completed", "cancelled"], "description": "Status of the slot" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp" }
+      },
+      "required": ["id", "barberId", "barberName", "customerId", "customerName", "service", "price", "date", "time", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of users containing barbers and customers"
+    },
+    "/appointments/{appointmentId}": {
+      "schema": "Appointment",
+      "description": "Collection of appointment bookings"
+    }
+  }
+}

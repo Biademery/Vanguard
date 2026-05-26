@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default-deny secure master gate
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions for attribute-based access control (ABAC)
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isBarber() {
+      return isSignedIn() && getUserData().role == 'barber';
+    }
+
+    // --- Users Profiles hard regulations ---
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId);
+    }
+
+    // --- Appointments scheduling hard regulations ---
+    match /appointments/{appointmentId} {
+      allow read: if isSignedIn() && (
+        resource.data.customerId == request.auth.uid || 
+        isBarber()
+      );
+      
+      allow create: if isSignedIn();
+      
+      allow update: if isSignedIn() && (
+        resource.data.customerId == request.auth.uid || 
+        isBarber()
+      );
+      
+      allow delete: if isBarber();
+    }
+
+    // --- Health tests ---
+    match /vanguard_health/{documentId} {
+      allow read, write: if true; // temporary ping
+    }
+  }
+}

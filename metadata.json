@@ -1,0 +1,6 @@
+{
+  "name": "Vanguard",
+  "description": "Plataforma de luxo para agendamentos e dashboard corporativo para barbearias premium",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
